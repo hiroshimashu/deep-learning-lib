@@ -1,4 +1,5 @@
 import numpy as np
+import unittest
 
 
 class Variable:
@@ -30,20 +31,33 @@ class Variable:
 
 
 class Function:
-    def __call__(self, input):
-        x = input.data
-        y = self.forward(x)
-        output = Variable(as_array(y))
-        output.set_creater(self)
+    def __call__(self, *inputs):
+        xs = [x.data for x in inputs]
+        ys = self.forward(*xs)
+        if not isinstance(ys, tuple):
+            ys = (ys,)
+        outputs = [Variable(as_array(y)) for y in ys]
+        for output in outputs:
+            output.set_creater(self)
         self.input = input
-        self.output = output
-        return output
+        self.outputs = outputs
+        return output if len(inputs) > 1 else outputs[0]
 
-    def forward(self, x):
+    def forward(self, xs):
         raise NotImplementedError()
 
-    def backward(self, gy):
+    def backward(self, gys):
         raise NotImplementedError()
+
+
+class Add(Function):
+    def forward(self, x0, x1):
+        y = x0 + x1
+        return y
+
+
+def add(x0, x1):
+    return Add()(x0, x1)
 
 
 class Square(Function):
@@ -88,7 +102,34 @@ def as_array(x):
     return x
 
 
-x = Variable(np.array(0.5))
-y = exp(square(x))
-y.backward()
-print(x.grad)
+xs = [Variable(np.array(2)), Variable(np.array(3))]
+f = Add()
+ys = f(xs)
+y = ys[0]
+print(y.data)
+
+
+class SquareTest(unittest.TestCase):
+    def test_forward(self):
+        x = Variable(np.array(2.0))
+        y = square(x)
+        expected = np.array(4.0)
+        self.assertEqual(y.data, expected)
+
+    def test_backward(self):
+        x = Variable(np.array(3.0))
+        y = square(x)
+        y.backward()
+        expected = np.array(6.0)
+        self.assertEqual(x.grad, expected)
+
+    def test_gradient_check(self):
+        x = Variable(np.random.rand(1))
+        y = square(x)
+        y.backward()
+        num_grad = numerical_diff(square, x)
+        flg = np.allclose(x.grad, num_grad)
+        self.assertTrue(flg)
+
+
+unittest.main()
